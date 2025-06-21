@@ -1,165 +1,152 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import axios from 'axios'
-
-interface Message {
-  id: string
-  text: string
-  isUser: boolean
-  timestamp: Date
-}
+import MapDisplay from './components/MapDisplay'
+import NationList from './components/NationList'
 
 const API_BASE_URL = 'http://localhost:8000'
 
+// --- Interfaces ---
+interface MapData {
+  width: number
+  height: number
+  regions: any[]
+  borders: any[]
+}
+
+interface LeaderProfile {
+  name: string
+  personality: string
+  ambition: string
+}
+
+interface Nation {
+  name: string
+  government_type: string
+  leader: LeaderProfile
+  region_name: string
+  terrain: string
+  climate: string
+}
+
+interface GameState {
+  map_data: MapData | null
+  nations: Nation[] | null
+}
+
 function App() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputMessage, setInputMessage] = useState('')
+  const [gameState, setGameState] = useState<GameState>({ map_data: null, nations: null })
   const [isLoading, setIsLoading] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [numNations, setNumNations] = useState(8)
+  const [gameStarted, setGameStarted] = useState(false)
+  const [showNationList, setShowNationList] = useState(false)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputMessage,
-      isUser: true,
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setInputMessage('')
+  const handleStartGame = async () => {
     setIsLoading(true)
+    setError(null)
+    setShowNationList(false)
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/chat`, {
-        message: inputMessage,
-        user_id: 'user'
+      // Use window dimensions for the map
+      const response = await axios.post(`${API_BASE_URL}/initialize-game`, {
+        regions: numNations,
+        width: window.innerWidth,
+        height: window.innerHeight,
       })
-
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response.data.response,
-        isUser: false,
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev, aiMessage])
-    } catch (error) {
-      console.error('Error sending message:', error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: 'Sorry, I encountered an error. Please try again.',
-        isUser: false,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
+      setGameState(response.data)
+      setGameStarted(true) // This triggers the view change
+    } catch (err: any) {
+      console.error('Error starting game:', err)
+      setError(err.response?.data?.detail || 'Failed to start the game. Is the backend server running?')
+      setGameStarted(false) // Ensure we stay on the setup screen if it fails
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">The Moderator</h1>
-          <p className="text-gray-600">AI-powered chat assistant</p>
+  const GameControls = () => (
+    <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
+      <h2 className="text-xl font-bold mb-4">Game Controls</h2>
+      <div className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="numNations" className="block text-sm font-medium text-gray-300 mb-1">
+            Number of Nations: <span className="text-teal-300 font-bold">{numNations}</span>
+          </label>
+          <input
+            type="range"
+            id="numNations"
+            min="2"
+            max="20"
+            value={numNations}
+            onChange={(e) => setNumNations(parseInt(e.target.value, 10))}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            disabled={isLoading}
+          />
         </div>
+        <button
+          onClick={handleStartGame}
+          disabled={isLoading}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 disabled:opacity-50 disabled:cursor-wait"
+        >
+          {isLoading ? 'Generating World...' : 'Start New Game'}
+        </button>
+        {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+      </div>
+    </div>
+  )
+  
+  return (
+    <div className="h-screen bg-gray-900 text-white flex flex-col font-sans">
+      {/* Header */}
+      <header className="w-full mx-auto px-4 py-2 flex justify-between items-center bg-gray-800/50 backdrop-blur-sm z-10">
+        <div>
+          <h1 className="text-3xl font-bold text-teal-300">The Moderator</h1>
+          <p className="text-sm text-gray-400">A Diplomatic Simulation Game</p>
+        </div>
+        {gameStarted && (
+          <div className="flex items-center gap-4">
+            <span className="text-gray-300">{`World with ${gameState.nations?.length || 0} Nations`}</span>
+            <button
+              onClick={() => setShowNationList(!showNationList)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300"
+            >
+              {showNationList ? 'Hide Nations' : 'Show Nations'}
+            </button>
+            <button
+              onClick={handleStartGame}
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 disabled:opacity-50"
+            >
+              {isLoading ? 'Generating...' : 'Generate New World'}
+            </button>
+          </div>
+        )}
       </header>
 
-      {/* Chat Container */}
-      <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
-        <div className="bg-white rounded-lg shadow-lg h-[600px] flex flex-col">
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-500 mt-8">
-                <div className="text-6xl mb-4">🤖</div>
-                <h3 className="text-lg font-medium">Welcome to The Moderator</h3>
-                <p className="text-sm">Start a conversation with the AI assistant</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.isUser
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-800'
-                    }`}
-                  >
-                    <p className="text-sm">{message.text}</p>
-                    <p className={`text-xs mt-1 ${
-                      message.isUser ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-            
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-200 text-gray-800 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                    <span className="text-sm">AI is thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <div className="border-t p-4">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isLoading}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={isLoading || !inputMessage.trim()}
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Send
-              </button>
+      {/* Main Content */}
+      <main className="flex-1 flex w-full h-full mx-auto">
+        {!gameStarted ? (
+          // --- PRE-GAME LAYOUT ---
+          <div className="w-full flex items-center justify-center">
+            <div className="w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-2xl">
+              <GameControls />
             </div>
           </div>
-        </div>
-      </div>
+        ) : (
+          // --- IN-GAME LAYOUT ---
+          <div className="w-full h-full flex flex-col">
+            <div className="flex-grow h-full absolute inset-0">
+              <MapDisplay mapData={gameState.map_data} nations={gameState.nations} />
+            </div>
+            
+            {showNationList && (
+              <div className="absolute bottom-0 left-0 w-full bg-gray-900/80 backdrop-blur-md p-4 max-h-[40vh] overflow-y-auto z-20">
+                <NationList nations={gameState.nations} isLoading={false} />
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   )
 }
