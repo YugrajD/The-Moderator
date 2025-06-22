@@ -37,7 +37,7 @@ function App() {
   const [gameState, setGameState] = useState<GameState>({ map_data: null, nations: null })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [numNations, setNumNations] = useState(8)
+  const [numNations, setNumNations] = useState(4)
   const [gameStarted, setGameStarted] = useState(false)
   const [showNationList, setShowNationList] = useState(false)
 
@@ -76,7 +76,7 @@ function App() {
             type="range"
             id="numNations"
             min="2"
-            max="20"
+            max="4"
             value={numNations}
             onChange={(e) => setNumNations(parseInt(e.target.value, 10))}
             className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
