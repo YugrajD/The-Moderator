@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
-import MapDisplay from './components/MapDisplay'
+import MapDisplay, { Nation } from './components/MapDisplay'
 import NationList from './components/NationList'
 
 const API_BASE_URL = 'http://localhost:8000'
@@ -13,24 +13,14 @@ interface MapData {
   borders: any[]
 }
 
-interface LeaderProfile {
-  name: string
-  personality: string
-  ambition: string
-}
-
-interface Nation {
-  name: string
-  government_type: string
-  leader: LeaderProfile
-  region_name: string
-  terrain: string
-  climate: string
-}
-
 interface GameState {
   map_data: MapData | null
   nations: Nation[] | null
+}
+
+interface DateState {
+  year: number;
+  season: 'Summer' | 'Winter';
 }
 
 function App() {
@@ -40,11 +30,20 @@ function App() {
   const [numNations, setNumNations] = useState(4)
   const [gameStarted, setGameStarted] = useState(false)
   const [showNationList, setShowNationList] = useState(false)
+  const [currentDate, setCurrentDate] = useState<DateState>({ year: 2025, season: 'Summer' });
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+
+  const handleGoHome = () => {
+    setGameStarted(false);
+    setGameState({ map_data: null, nations: null });
+    setShowNationList(false);
+  }
 
   const handleStartGame = async () => {
     setIsLoading(true)
     setError(null)
     setShowNationList(false)
+    setCurrentDate({ year: 2025, season: 'Summer' }); // Reset date on new game
 
     try {
       // Use window dimensions for the map
@@ -97,34 +96,61 @@ function App() {
   
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col font-sans">
-      {/* Header */}
-      <header className="w-full mx-auto px-4 py-2 flex justify-between items-center bg-gray-800/50 backdrop-blur-sm z-10">
-        <div>
-          <h1 className="text-3xl font-bold text-teal-300">The Moderator</h1>
-          <p className="text-sm text-gray-400">A Diplomatic Simulation Game</p>
-        </div>
-        {gameStarted && (
+      {!isHeaderVisible && gameStarted && (
+        <button
+          onClick={() => setIsHeaderVisible(true)}
+          className="absolute top-2 right-2 z-30 bg-gray-700/80 p-2 rounded-full hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          title="Show Header"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      )}
+
+      {isHeaderVisible && (
+        <header className="w-full mx-auto px-4 py-2 flex justify-between items-center bg-gray-800/50 backdrop-blur-sm z-10 shrink-0">
+          <div onClick={handleGoHome} className="cursor-pointer">
+            <h1 className="text-3xl font-bold text-teal-300">The Moderator</h1>
+            <p className="text-sm text-gray-400">A Diplomatic Simulation Game</p>
+          </div>
           <div className="flex items-center gap-4">
-            <span className="text-gray-300">{`World with ${gameState.nations?.length || 0} Nations`}</span>
+            {gameStarted && (
+              <>
+                <span className="text-lg font-semibold text-gray-300 bg-gray-700/50 px-3 py-1 rounded-md">
+                  {currentDate.season} {currentDate.year}
+                </span>
+                <span className="text-gray-300">{`World with ${gameState.nations?.length || 0} Nations`}</span>
+                <button
+                  onClick={() => setShowNationList(!showNationList)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300"
+                >
+                  {showNationList ? 'Hide Nations' : 'Show Nations'}
+                </button>
+                <button
+                  onClick={handleStartGame}
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 disabled:opacity-50"
+                >
+                  {isLoading ? 'Generating...' : 'Generate New World'}
+                </button>
+              </>
+            )}
             <button
-              onClick={() => setShowNationList(!showNationList)}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300"
+              onClick={() => setIsHeaderVisible(false)}
+              className="bg-gray-700/80 p-2 rounded-full hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              title="Hide Header"
             >
-              {showNationList ? 'Hide Nations' : 'Show Nations'}
-            </button>
-            <button
-              onClick={handleStartGame}
-              disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 disabled:opacity-50"
-            >
-              {isLoading ? 'Generating...' : 'Generate New World'}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
             </button>
           </div>
-        )}
-      </header>
+        </header>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 flex w-full h-full mx-auto">
+      <main className="flex-1 flex w-full h-full mx-auto overflow-hidden">
         {!gameStarted ? (
           // --- PRE-GAME LAYOUT ---
           <div className="w-full flex items-center justify-center">

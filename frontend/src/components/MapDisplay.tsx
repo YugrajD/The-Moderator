@@ -1,12 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import polylabel from 'polylabel';
 
-interface Point {
-  x: number;
-  y: number;
-}
+// --- Shared Interfaces ---
+interface Point { x: number; y: number; }
 
-interface Province {
+export interface Province {
   id: number;
   nationId: number;
   isCapital?: boolean;
@@ -17,9 +15,19 @@ interface Province {
   area: number;
 }
 
-interface Nation {
+export interface LeaderProfile {
+  name: string;
+  personality: string;
+  ambition: string;
+}
+
+export interface Nation {
   id: number;
   name: string;
+  government_type: string;
+  leader: LeaderProfile;
+  capital_province_name: string;
+  provinces: Province[];
 }
 
 interface MapData {
@@ -55,6 +63,8 @@ const NATION_COLORS = [
 ];
 
 const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
+  const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
+
   if (!mapData || !nations) {
     return (
       <div className="flex items-center justify-center w-full h-full bg-gray-800 rounded-lg">
@@ -74,8 +84,17 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
   // Find the capital province for each nation to place the label
   const capitals = provinces.filter((p: Province) => p.isCapital);
 
+  const handleProvinceClick = (e: React.MouseEvent, province: Province) => {
+    e.stopPropagation(); // Prevent the background click from firing
+    setSelectedProvince(province);
+  };
+
+  const handleBackgroundClick = () => {
+    setSelectedProvince(null);
+  };
+
   return (
-    <div className="w-full h-full bg-gray-900 overflow-hidden">
+    <div className="w-full h-full bg-gray-900 overflow-hidden" onClick={handleBackgroundClick}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-full object-contain"
@@ -87,7 +106,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
             // This part needs the full province data to check nation Ids
             // A simplified border is drawn for now. A future improvement would be to pass
             // the full province objects to the border generation.
-            const pathData = "M" + border.path.map(p => `${p.x} ${p.y}`).join(" L ");
+            const pathData = "M" + border.path.map((p: { x: number; y: number }) => `${p.x} ${p.y}`).join(" L ");
             return (
               <path
                 key={border.id}
@@ -112,6 +131,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
               stroke="#111827"
               strokeWidth="0.5"
               className="transition-all duration-300 group-hover:stroke-teal-300"
+              onClick={(e) => handleProvinceClick(e, province)}
             />
           );
         })}
@@ -165,6 +185,29 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
             </g>
           );
         })}
+
+        {/* Draw Selected Province Tooltip */}
+        {selectedProvince && (
+          <g className="pointer-events-none">
+            <rect
+              x={selectedProvince.center.x - 50}
+              y={selectedProvince.center.y - 30}
+              width="100"
+              height="20"
+              fill="rgba(0,0,0,0.7)"
+              rx="5"
+            />
+            <text
+              x={selectedProvince.center.x}
+              y={selectedProvince.center.y - 20}
+              textAnchor="middle"
+              fill="white"
+              fontSize="12"
+            >
+              {selectedProvince.name}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );
