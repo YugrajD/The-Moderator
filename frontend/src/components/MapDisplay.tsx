@@ -8,17 +8,21 @@ export interface Province {
   id: number;
   nationId: number;
   isCapital?: boolean;
+  cityType?: 'capital' | 'major';
   name: string;
   center: Point;
   polygon: Point[];
   terrain: string;
   area: number;
+  population: number;
+  marker?: string;
 }
 
 export interface LeaderProfile {
   name: string;
   personality: string;
   ambition: string;
+  age: number;
 }
 
 export interface Nation {
@@ -28,6 +32,8 @@ export interface Nation {
   leader: LeaderProfile;
   capital_province_name: string;
   provinces: Province[];
+  military_strength: number;
+  population: number;
 }
 
 interface MapData {
@@ -136,78 +142,177 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ mapData, nations }) => {
           );
         })}
 
-        {/* Draw Nation Labels on Capitals */}
-        {capitals.map(capital => {
-          const nation = nations.find(n => n.id === capital.nationId);
+        {/* Draw Nation & City Labels */}
+        {provinces.map(province => {
+          if (!province.cityType) return null;
+
+          const nation = nations.find(n => n.id === province.nationId);
           if (!nation) return null;
 
-          const polygonForLabel = capital.polygon.map(p => [p.x, p.y]);
+          const polygonForLabel = province.polygon.map(p => [p.x, p.y]);
           const labelPosArr = polylabel([polygonForLabel], 1.0);
           const labelPos = { x: labelPosArr[0], y: labelPosArr[1] };
           
-          const dynamicFontSize = Math.max(10, Math.min(28, Math.sqrt(capital.area) / 3));
+          let cityName = '';
+          let symbol = '';
+          let fontSize = 0;
+          let symbolDy = '0em';
+          let nameDy = '0em';
+
+          if (province.cityType === 'capital') {
+            cityName = nation.name;
+            symbol = '★';
+            fontSize = Math.max(10, Math.min(28, Math.sqrt(province.area) / 3));
+            symbolDy = "-0.1em";
+            nameDy = "0.9em";
+          } else if (province.cityType === 'major') {
+            cityName = province.name;
+            symbol = '●';
+            fontSize = Math.max(8, Math.min(20, Math.sqrt(province.area) / 4.5));
+            symbolDy = '0.35em';
+            nameDy = '1.4em';
+          } else {
+            return null;
+          }
 
           return (
-            <g key={`capital-group-${capital.id}`}>
-              {/* Capital City Indicator (Star) */}
+            <g key={`city-label-${province.id}`} className="pointer-events-none">
+              {/* City Symbol */}
               <text
                 x={labelPos.x}
                 y={labelPos.y}
                 textAnchor="middle"
-                dy="-0.6em" // Adjusted vertical position
-                fill="#FFD700" // Gold color for the star
-                fontSize={dynamicFontSize * 1.2} // Reduced size
-                className="pointer-events-none"
+                dy={symbolDy}
+                fill={province.cityType === 'capital' ? '#FFD700' : '#FFFFFF'}
+                fontSize={fontSize * 1.1}
                 style={{ textShadow: '0 0 3px black, 0 0 5px black' }}
               >
-                ★
+                {symbol}
               </text>
 
-              {/* Nation Name */}
+              {/* City/Nation Name */}
               <text
-                key={`label-${capital.id}`}
                 x={labelPos.x}
                 y={labelPos.y}
                 textAnchor="middle"
-                dy=".3em"
+                dy={nameDy}
                 fill="#FFFFFF"
-                fontSize={dynamicFontSize}
+                fontSize={fontSize}
                 fontWeight="bold"
                 paintOrder="stroke"
                 stroke="#000000"
                 strokeWidth="3px"
                 strokeLinecap="butt"
                 strokeLinejoin="miter"
-                className="pointer-events-none"
               >
-                {nation.name}
+                {cityName}
               </text>
             </g>
           );
         })}
 
-        {/* Draw Selected Province Tooltip */}
-        {selectedProvince && (
-          <g className="pointer-events-none">
-            <rect
-              x={selectedProvince.center.x - 50}
-              y={selectedProvince.center.y - 30}
-              width="100"
-              height="20"
-              fill="rgba(0,0,0,0.7)"
-              rx="5"
-            />
+        {/* Draw Event Markers */}
+        {provinces.map(province => {
+          if (!province.marker) return null;
+
+          let symbol = '';
+          let color = '#FFFFFF';
+          switch (province.marker) {
+            case 'conquered':
+              symbol = '⚔️'; // Crossed swords
+              color = '#FF4136'; // Red
+              break;
+            case 'defended':
+              symbol = '🛡️'; // Shield
+              color = '#0074D9'; // Blue
+              break;
+            case 'disaster':
+              symbol = '➕'; // Medical Cross
+              color = '#FFDC00'; // Yellow
+              break;
+            default:
+              return null;
+          }
+
+          return (
             <text
-              x={selectedProvince.center.x}
-              y={selectedProvince.center.y - 20}
+              key={`marker-${province.id}`}
+              x={province.center.x}
+              y={province.center.y}
               textAnchor="middle"
-              fill="white"
-              fontSize="12"
+              dy=".35em"
+              fill={color}
+              fontSize="24"
+              className="pointer-events-none"
+              style={{ textShadow: '0 0 4px black, 0 0 6px black' }}
             >
-              {selectedProvince.name}
+              {symbol}
             </text>
-          </g>
-        )}
+          );
+        })}
+
+        {/* Draw Selected Province Tooltip */}
+        {selectedProvince && (() => {
+          const tooltipWidth = 120;
+          const tooltipHeight = 40;
+          const offset = 15; // How far from the center point
+
+          // Default position is above the center point
+          let tooltipX = selectedProvince.center.x - tooltipWidth / 2;
+          let tooltipY = selectedProvince.center.y - tooltipHeight - offset;
+
+          // Flip to appear below if it would go off the top of the map
+          if (tooltipY < 0) {
+            tooltipY = selectedProvince.center.y + offset;
+          }
+
+          // Adjust horizontally to stay within the map bounds
+          if (tooltipX < 0) {
+            tooltipX = 5; // Small margin from the edge
+          }
+          if (tooltipX + tooltipWidth > width) {
+            tooltipX = width - tooltipWidth - 5; // Small margin from the edge
+          }
+          
+          // Adjust vertically to stay within the map bounds
+          if (tooltipY + tooltipHeight > height) {
+            tooltipY = height - tooltipHeight - 5; // Small margin from the edge
+          }
+
+          const textX = tooltipX + tooltipWidth / 2;
+
+          return (
+            <g className="pointer-events-none">
+              <rect
+                x={tooltipX}
+                y={tooltipY}
+                width={tooltipWidth}
+                height={tooltipHeight}
+                fill="rgba(0,0,0,0.7)"
+                rx="5"
+              />
+              <text
+                x={textX}
+                y={tooltipY + 17}
+                textAnchor="middle"
+                fill="white"
+                fontSize="12"
+                fontWeight="bold"
+              >
+                {selectedProvince.name}
+              </text>
+              <text
+                x={textX}
+                y={tooltipY + 32}
+                textAnchor="middle"
+                fill="white"
+                fontSize="10"
+              >
+                Pop: {(selectedProvince.population ?? 0).toLocaleString()}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );

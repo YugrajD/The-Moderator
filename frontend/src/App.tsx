@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import axios from 'axios'
 import MapDisplay, { Nation } from './components/MapDisplay'
 import NationList from './components/NationList'
+import AgentMeetingModal from './components/AgentMeetingModal'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -16,6 +17,10 @@ interface MapData {
 interface GameState {
   map_data: MapData | null
   nations: Nation[] | null
+  diplomatic_relations: any; // Added to hold the relations data
+  event_log: string[];
+  agent_world_initialized?: boolean;
+  current_meeting?: any;
 }
 
 interface DateState {
@@ -24,7 +29,7 @@ interface DateState {
 }
 
 function App() {
-  const [gameState, setGameState] = useState<GameState>({ map_data: null, nations: null })
+  const [gameState, setGameState] = useState<GameState>({ map_data: null, nations: null, diplomatic_relations: {}, event_log: [] })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [numNations, setNumNations] = useState(4)
@@ -32,10 +37,11 @@ function App() {
   const [showNationList, setShowNationList] = useState(false)
   const [currentDate, setCurrentDate] = useState<DateState>({ year: 2025, season: 'Summer' });
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [showAgentMeeting, setShowAgentMeeting] = useState(false);
 
   const handleGoHome = () => {
     setGameStarted(false);
-    setGameState({ map_data: null, nations: null });
+    setGameState({ map_data: null, nations: null, diplomatic_relations: {}, event_log: [] });
     setShowNationList(false);
   }
 
@@ -54,6 +60,11 @@ function App() {
       })
       setGameState(response.data)
       setGameStarted(true) // This triggers the view change
+      
+      // Check if there's an active agent meeting to show immediately
+      if (response.data.current_meeting) {
+        setShowAgentMeeting(true);
+      }
     } catch (err: any) {
       console.error('Error starting game:', err)
       setError(err.response?.data?.detail || 'Failed to start the game. Is the backend server running?')
@@ -62,6 +73,44 @@ function App() {
       setIsLoading(false)
     }
   }
+
+  const handleAdvanceTime = async () => {
+    setIsLoading(true);
+    setError(null);
+    setShowAgentMeeting(false);
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/advance-time`, gameState);
+      
+      const newGameState = response.data;
+      setGameState(newGameState);
+
+      // Check if there's an active agent meeting
+      if (newGameState.current_meeting) {
+        setShowAgentMeeting(true);
+      }
+
+      // Advance the date by 6 months
+      setCurrentDate(prevDate => {
+        if (prevDate.season === 'Summer') {
+          return { year: prevDate.year, season: 'Winter' };
+        } else {
+          return { year: prevDate.year + 1, season: 'Summer' };
+        }
+      });
+
+    } catch (err: any) {
+      console.error('Error advancing time:', err);
+      setError(err.response?.data?.detail || 'Failed to advance time. An error occurred in the simulation.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEndAgentMeeting = () => {
+    setShowAgentMeeting(false);
+    // The meeting consequences will be applied when the meeting ends
+  };
 
   const GameControls = () => (
     <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
@@ -96,6 +145,13 @@ function App() {
   
   return (
     <div className="h-screen bg-gray-900 text-white flex flex-col font-sans">
+      {showAgentMeeting && gameState.current_meeting && (
+        <AgentMeetingModal
+          meetingData={gameState.current_meeting}
+          onClose={() => setShowAgentMeeting(false)}
+          onEndMeeting={handleEndAgentMeeting}
+        />
+      )}
       {!isHeaderVisible && gameStarted && (
         <button
           onClick={() => setIsHeaderVisible(true)}
@@ -126,6 +182,13 @@ function App() {
                   className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300"
                 >
                   {showNationList ? 'Hide Nations' : 'Show Nations'}
+                </button>
+                <button
+                  onClick={handleAdvanceTime}
+                  disabled={isLoading}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 disabled:opacity-50"
+                >
+                  {isLoading ? 'Simulating...' : 'Advance Time (6 Months)'}
                 </button>
                 <button
                   onClick={handleStartGame}

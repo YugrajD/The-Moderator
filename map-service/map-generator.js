@@ -49,50 +49,77 @@ class MapGenerator {
   }
 
   // Generate regions using Voronoi tessellation
-  generateRegions(width, height, count) {
-    const regions = [];
-    
-    // Generate random center points for the regions
-    const points = Array.from({ length: count }, () => [
+  generateRegions(width, height, nationCount) {
+    const allProvinces = [];
+    const numProvinces = 120; // Generate a lot of small provinces
+
+    const points = Array.from({ length: numProvinces }, () => [
       Math.random() * width,
       Math.random() * height
     ]);
 
-    // Compute Voronoi diagram
     const delaunay = Delaunay.from(points);
     const voronoi = delaunay.voronoi([0, 0, width, height]);
 
-    // Create regions from Voronoi cells
-    for (let i = 0; i < count; i++) {
+    // 1. Create all the base provinces
+    for (let i = 0; i < numProvinces; i++) {
       const polygon = voronoi.cellPolygon(i);
-      if (!polygon) continue; // Skip cells that can't be computed
+      if (!polygon) continue;
 
-      const centerPoint = { x: points[i][0], y: points[i][1] };
+      const neighbors = [...voronoi.neighbors(i)];
       
-      // Calculate area of the polygon
-      let area = 0;
-      for (let j = 0, len = polygon.length; j < len; j++) {
-          const p1 = polygon[j];
-          const p2 = polygon[(j + 1) % len];
-          area += p1[0] * p2[1] - p2[0] * p1[1];
-      }
-      area = Math.abs(area / 2);
-
-      const region = {
-        id: i + 1,
-        name: this.generateRegionName(),
-        center: centerPoint,
+      allProvinces.push({
+        id: i, // Use index as ID for now
+        nationId: null, // To be assigned
+        name: this.generateRegionName(), // Add the missing name
+        center: { x: points[i][0], y: points[i][1] },
         polygon: polygon.map(p => ({ x: p[0], y: p[1] })),
-        neighbors: [...voronoi.neighbors(i)].map(n => n + 1),
-        area: area,
-        population: Math.floor(area * (Math.random() * 50 + 10)),
-        terrain: this.getRandomTerrain(),
-        climate: this.getRandomClimate()
-      };
-      regions.push(region);
+        neighbors: neighbors, // Store neighbor indices
+        terrain: this.getRandomLandTerrain(), // No more water
+        climate: this.getRandomClimate(),
+        area: this.getPolygonArea(polygon)
+      });
     }
 
-    return regions;
+    // 2. Grow nations from random capitals
+    const unassignedProvinces = new Set(allProvinces.map(p => p.id));
+    const nationCapitals = [];
+    // Shuffle provinces to pick random capitals
+    const shuffledProvinces = [...allProvinces].sort(() => 0.5 - Math.random());
+
+    for (let i = 0; i < nationCount; i++) {
+      const capital = shuffledProvinces[i];
+      capital.nationId = i + 1;
+      capital.isCapital = true;
+      nationCapitals.push(capital);
+      unassignedProvinces.delete(capital.id);
+    }
+
+    // Use a queue for each nation to expand outwards (BFS)
+    const queues = nationCapitals.map(capital => [capital]);
+
+    while (unassignedProvinces.size > 0) {
+      for (let i = 0; i < queues.length; i++) {
+        const nationId = i + 1;
+        const queue = queues[i];
+        if (queue.length === 0) continue;
+
+        const currentProvince = queue.shift();
+        
+        for (const neighborId of currentProvince.neighbors) {
+          if (unassignedProvinces.has(neighborId)) {
+            const neighborProvince = allProvinces[neighborId];
+            neighborProvince.nationId = nationId;
+            unassignedProvinces.delete(neighborId);
+            queue.push(neighborProvince);
+          }
+        }
+      }
+      // If all queues are empty but there are still unassigned provinces, break to avoid infinite loop
+      if (queues.every(q => q.length === 0)) break;
+    }
+
+    return allProvinces;
   }
 
   // Generate borders between regions
@@ -135,50 +162,87 @@ class MapGenerator {
     return borders;
   }
 
-  generateWavyBorder(start, end, segments = 10, noise = 0.2) {
-    const path = [start];
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    const length = Math.sqrt(dx * dx + dy * dy);
+  generateWavyBorder(start, end, roughness = 0.75, displacement = 0.45) {
+    const subdivide = (p1, p2, disp) => {
+      const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      
+      // Base case: if the segment is too short, just return the end point.
+      if (dist < 5) {
+        return [p2];
+      }
+  
+      // Calculate the midpoint.
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+  
+      // Calculate the perpendicular vector.
+      const normalX = -(p2.y - p1.y) / dist;
+      const normalY = (p2.x - p1.x) / dist;
+      
+      // Displace the midpoint.
+      const offset = (Math.random() - 0.5) * disp;
+      const displacedMid = {
+        x: midX + normalX * offset,
+        y: midY + normalY * offset,
+      };
+  
+      // Reduce displacement for the next level of recursion.
+      const newDisp = disp * roughness;
+      
+      // Recurse on the two new segments and combine the results.
+      const path1 = subdivide(p1, displacedMid, newDisp);
+      const path2 = subdivide(displacedMid, p2, newDisp);
+      
+      return [...path1, ...path2];
+    };
+
+    // Calculate the initial displacement based on the total length.
+    const initialDisplacement = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)) * displacement;
     
-    for (let i = 1; i < segments; i++) {
-        const t = i / segments;
-        const noiseFactor = (Math.random() - 0.5) * length * noise;
-        
-        // Point along the straight line
-        const pointOnLine = {
-            x: start.x + t * dx,
-            y: start.y + t * dy
-        };
-        
-        // Add perpendicular noise
-        const noisyPoint = {
-            x: pointOnLine.x - dy / length * noiseFactor,
-            y: pointOnLine.y + dx / length * noiseFactor
-        };
-        
-        path.push(noisyPoint);
+    // Start the path with the start point, then add the subdivided points.
+    return [start, ...subdivide(start, end, initialDisplacement)];
+  }
+
+  getPolygonArea(polygon) {
+    let area = 0;
+    for (let i = 0, len = polygon.length; i < len; i++) {
+      const p1 = polygon[i];
+      const p2 = polygon[(i + 1) % len];
+      area += p1[0] * p2[1] - p2[0] * p1[1];
     }
-    
-    path.push(end);
-    return path;
+    return Math.abs(area / 2);
+  }
+
+  // No more water terrain
+  getRandomLandTerrain() {
+    const terrains = ['plains', 'mountains', 'forest', 'desert', 'swamp', 'hills', 'coastal', 'tundra'];
+    return terrains[Math.floor(Math.random() * terrains.length)];
   }
 
   // Generate a region name
   generateRegionName() {
-    const prefixes = ['North', 'South', 'East', 'West', 'Central', 'Upper', 'Lower', 'New', 'Old'];
-    const suffixes = ['land', 'ia', 'stan', 'burg', 'shire', 'vale', 'moor', 'dale', 'wood'];
+    const starts = [
+      "Val", "Sol", "Eld", "Mor", "Lun", "Ast", "Cor", "Pyr", "Aer", "Zeph", "Glorn", "Ith", "Rhun", "Sil",
+      "Bel", "Kael", "Zan", "Drak", "Fael", "Gwyn", "Tyr", "Vor", "Xyl", "Cairn", "Dun", "Strath", "Glen", "Loch"
+    ];
+    const middles = [
+      "en", "ar", "ia", "or", "an", "el", "in", "yr", "os", "um", "ak", "ir",
+      "ana", "eth", "ion", "o", "u", "ae", "is", "ali"
+    ];
+    const ends = [
+      "ia", "dor", "grad", "fall", "wind", "port", "gard", "th", "is", "a", "gard", "nar", "dale", "stead",
+      "burg", "fel", "wood", "mire", "peak", "ford", "ham", "wick", "ton", "vale", "crest", "rock", "burn"
+    ];
     
-    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+    const hasMiddle = Math.random() > 0.4;
     
-    return `${prefix}${suffix}`;
-  }
-
-  // Get random terrain type
-  getRandomTerrain() {
-    const terrains = ['plains', 'mountains', 'forest', 'desert', 'swamp', 'hills', 'coastal', 'tundra'];
-    return terrains[Math.floor(Math.random() * terrains.length)];
+    let name = starts[Math.floor(Math.random() * starts.length)];
+    if (hasMiddle) {
+      name += middles[Math.floor(Math.random() * middles.length)];
+    }
+    name += ends[Math.floor(Math.random() * ends.length)];
+    
+    return name;
   }
 
   // Get random climate
@@ -219,6 +283,13 @@ class MapGenerator {
   // List all stored maps
   listMaps() {
     return Array.from(this.maps.keys());
+  }
+
+  // Helper to calculate distance from map center
+  distanceFromCenter(point, width, height) {
+    const cx = width / 2;
+    const cy = height / 2;
+    return Math.sqrt(Math.pow(point.x - cx, 2) + Math.pow(point.y - cy, 2));
   }
 }
 

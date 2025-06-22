@@ -1,6 +1,7 @@
 import React from 'react';
 import { Nation } from './MapDisplay'; // Import the unified Nation type
 import Flag from './Flag'; // Import the new Flag component
+import LeaderPortrait from './LeaderPortrait'; // Import the new LeaderPortrait component
 
 interface NationListProps {
   nations: Nation[] | null;
@@ -30,13 +31,9 @@ const NationList: React.FC<NationListProps> = ({ nations, isLoading }) => {
               <Flag nationId={nation.id} />
             </div>
             <div className="bg-gray-800 p-3 rounded-md my-2 flex items-center gap-3">
-              <img
-                src={`https://api.dicebear.com/8.x/personas/svg?seed=${nation.leader.name}`}
-                alt={`Portrait of ${nation.leader.name}`}
-                className="w-16 h-16 rounded-full bg-gray-700 border-2 border-gray-600"
-              />
+              <LeaderPortrait leaderName={nation.leader.name} />
               <div>
-                <p className="font-semibold text-gray-200">Leader: {nation.leader.name}</p>
+                <p className="font-semibold text-gray-200">Leader: {nation.leader.name}{nation.leader.age ? `, ${nation.leader.age}` : ''}</p>
                 <p className="text-xs text-gray-400 italic">"{nation.leader.personality}"</p>
                 <p className="text-sm text-amber-400 mt-1">Ambition: {nation.leader.ambition}</p>
               </div>
@@ -44,6 +41,8 @@ const NationList: React.FC<NationListProps> = ({ nations, isLoading }) => {
             <div>
               <p className="text-xs text-gray-500">Capital: {nation.capital_province_name}</p>
               <p className="text-xs text-gray-500">Provinces: {nation.provinces.length}</p>
+              <p className="text-xs text-gray-500">Population: {(nation.population ?? 0).toLocaleString()}</p>
+              <p className="text-xs text-gray-500">Military Strength: {(nation.military_strength ?? 0).toLocaleString()}</p>
             </div>
           </div>
         ))}
